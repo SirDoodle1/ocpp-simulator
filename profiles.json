@@ -1,0 +1,54 @@
+{
+  "slow_ac_7kw": {
+    "name": "Slow AC 7kW",
+    "description": "7kW AC single phase, typical home/destination charger",
+    "maxPowerKw": 7.4,
+    "connectorType": "Type2",
+    "phases": 1,
+    "voltage": 230,
+    "amperage": 32,
+    "meterValueIntervalSec": 60,
+    "chargePointModel": "Home-7kW-Sim",
+    "measurands": ["Energy.Active.Import.Register"],
+    "quirks": ["energy_only"]
+  },
+  "fast_ac_22kw": {
+    "name": "Fast AC 22kW",
+    "description": "22kW AC three phase, workplace/public AC charging",
+    "maxPowerKw": 22,
+    "connectorType": "Type2",
+    "phases": 3,
+    "voltage": 400,
+    "amperage": 32,
+    "meterValueIntervalSec": 30,
+    "chargePointModel": "Fast-AC-22kW-Sim",
+    "measurands": ["Energy.Active.Import.Register", "Power.Active.Import", "Current.Import"],
+    "quirks": []
+  },
+  "rapid_dc_50kw": {
+    "name": "Rapid DC 50kW",
+    "description": "50kW DC rapid charger, CCS/CHAdeMO",
+    "maxPowerKw": 50,
+    "connectorType": "CCS",
+    "phases": 0,
+    "voltage": 400,
+    "amperage": 125,
+    "meterValueIntervalSec": 10,
+    "chargePointModel": "Rapid-DC-50kW-Sim",
+    "measurands": ["Energy.Active.Import.Register", "Power.Active.Import", "Current.Import", "Voltage"],
+    "quirks": ["dc_rapid", "power_taper"]
+  },
+  "ultrarapid_dc_150kw": {
+    "name": "Ultra-rapid DC 150kW",
+    "description": "150kW DC ultra-rapid, high-power charging",
+    "maxPowerKw": 150,
+    "connectorType": "CCS",
+    "phases": 0,
+    "voltage": 500,
+    "amperage": 350,
+    "meterValueIntervalSec": 5,
+    "chargePointModel": "UltraRapid-DC-150kW-Sim",
+    "measurands": ["Energy.Active.Import.Register", "Power.Active.Import", "Current.Import", "Voltage", "Temperature"],
+    "quirks": ["dc_rapid", "power_taper", "temperature_reporting"]
+  }
+}
