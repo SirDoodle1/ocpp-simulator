@@ -1,12 +1,16 @@
 const BASE = '';
 
 export async function api(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, ...data };
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, ...data };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Network error' };
+  }
 }
 
 export async function getStatus() {

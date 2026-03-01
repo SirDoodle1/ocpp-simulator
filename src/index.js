@@ -10,15 +10,19 @@ import { logger, logOcppMessage } from './lib/logger.js';
 
 const OCPP_SUBPROTOCOL = 'ocpp1.6';
 
-const CSMS_WS_URL = process.env.CSMS_WS_URL;
-const CHARGE_POINT_ID = process.env.CHARGE_POINT_ID;
+const CSMS_WS_URL = (process.env.CSMS_WS_URL || '').trim();
+const CHARGE_POINT_ID = (process.env.CHARGE_POINT_ID || '').trim();
 
 if (!CSMS_WS_URL || !CHARGE_POINT_ID) {
   console.error('Missing required env vars. Copy .env.example to .env and set CSMS_WS_URL and CHARGE_POINT_ID.');
   process.exit(1);
 }
 
-const wsUrl = `${CSMS_WS_URL.replace(/\/$/, '')}/${CHARGE_POINT_ID}`;
+// CSMS expects ws://host:port/ocpp/{chargePointId} - always append chargePointId to base URL
+const baseUrl = CSMS_WS_URL.replace(/\/$/, '');
+const wsUrl = baseUrl.endsWith(`/${CHARGE_POINT_ID}`)
+  ? baseUrl
+  : `${baseUrl}/${CHARGE_POINT_ID}`;
 
 let currentSimulator = null;
 let currentWs = null;
@@ -54,6 +58,7 @@ function emitMeterUpdate(connectorId, transactionId, meterWh, powerW) {
 
 function connect() {
   manualDisconnect = false;
+  logger.info(`Connecting to CSMS: ${wsUrl} (chargePointId=${CHARGE_POINT_ID}, subprotocol=${OCPP_SUBPROTOCOL})`);
   const ws = new WebSocket(wsUrl, [OCPP_SUBPROTOCOL], { handshakeTimeout: 10000 });
   currentWs = ws;
 

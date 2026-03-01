@@ -15,7 +15,17 @@ function ChargerIcon({ status }) {
   );
 }
 
-function Header({ status, connected, profiles }) {
+function Header({ status, connected, profiles, onError }) {
+  const csmsConnected = status?.connected ?? false;
+  const handleConnect = async () => {
+    onError?.(null);
+    const res = await api.connect();
+    if (!res.ok) onError?.(res.error || res.message || 'Connect failed');
+  };
+  const handleDisconnect = async () => {
+    const res = await api.disconnect();
+    if (!res.ok) onError?.(res.error || res.message || 'Disconnect failed');
+  };
   return (
     <header className="flex items-center justify-between px-6 py-4 bg-slate-900/80 border-b border-slate-700">
       <div className="flex items-center gap-4">
@@ -23,22 +33,22 @@ function Header({ status, connected, profiles }) {
         <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-300">
           {status?.profile?.name || '—'} {status?.profile?.maxPowerKw ? `${status.profile.maxPowerKw}kW` : ''}
         </span>
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-          <span className="text-sm text-slate-400">{connected ? 'Connected' : 'Disconnected'}</span>
+        <div className="flex items-center gap-2" title={connected ? 'Receiving live updates' : 'No live updates from simulator'}>
+          <span className={`w-2.5 h-2.5 rounded-full ${csmsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+          <span className="text-sm text-slate-400">{csmsConnected ? 'Connected to CSMS' : 'Disconnected'}</span>
         </div>
       </div>
       <div className="flex gap-2">
         <button
-          onClick={() => api.connect()}
-          disabled={connected}
+          onClick={handleConnect}
+          disabled={csmsConnected}
           className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
         >
           Connect
         </button>
         <button
-          onClick={() => api.disconnect()}
-          disabled={!connected}
+          onClick={handleDisconnect}
+          disabled={!csmsConnected}
           className="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
         >
           Disconnect
@@ -82,7 +92,7 @@ function ChargerStatusPanel({ status, lastHeartbeat }) {
   );
 }
 
-function ActiveSessionPanel({ status, onStop }) {
+function ActiveSessionPanel({ status, onStop, onError }) {
   const connectors = status?.connectors ?? [];
   const session = connectors.find((c) => c.transactionId);
   const [duration, setDuration] = useState(0);
@@ -127,7 +137,10 @@ function ActiveSessionPanel({ status, onStop }) {
         </div>
       </div>
       <button
-        onClick={() => onStop(session.connectorId)}
+        onClick={async () => {
+          const res = await onStop(session.connectorId);
+          if (res && !res.ok) onError?.(res?.error || res?.message || 'Stop failed');
+        }}
         className="mt-4 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
       >
         Stop Session
@@ -136,12 +149,23 @@ function ActiveSessionPanel({ status, onStop }) {
   );
 }
 
-function ControlsPanel({ status, connectorId, setConnectorId, idTag, setIdTag, profiles }) {
+function ControlsPanel({ status, connectorId, setConnectorId, idTag, setIdTag, profiles, onError }) {
   const hasSim = !!status?.connectors;
+
+  const withErrorCheck = (fn) => async (...args) => {
+    const res = await fn(...args);
+    if (!res?.ok) onError?.(res?.error || res?.message || 'Action failed');
+    return res;
+  };
 
   return (
     <section className="bg-slate-800/60 rounded-xl p-5 border border-slate-700">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">Controls</h2>
+      {!hasSim && (
+        <p className="mb-4 text-sm text-amber-400/90 bg-amber-900/20 rounded-lg px-3 py-2 border border-amber-600/30">
+          Click <strong>Connect</strong> in the header to connect to the CSMS first. Ensure the Volltra backend is running and <code className="text-amber-300">CSMS_WS_URL</code> in <code className="text-amber-300">.env</code> is correct.
+        </p>
+      )}
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <span className="text-sm text-slate-400 self-center">Connector:</span>
@@ -166,18 +190,24 @@ function ControlsPanel({ status, connectorId, setConnectorId, idTag, setIdTag, p
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => api.plugIn(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-sm">Plug In</button>
-          <button onClick={() => api.plugOut(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-sm">Plug Out</button>
-          <button onClick={() => api.startSession(connectorId, idTag || 'RFID')} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm">Start Session</button>
-          <button onClick={() => api.stopSession(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-sm">Stop Session</button>
-          <button onClick={() => api.setFault(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 disabled:opacity-50 text-sm">Set Fault</button>
-          <button onClick={() => api.setAvailable(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-sm">Clear Fault</button>
+          <button onClick={() => withErrorCheck(api.plugIn)(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Plug In</button>
+          <button onClick={() => withErrorCheck(api.plugOut)(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Plug Out</button>
+          <button onClick={() => withErrorCheck(api.startSession)(connectorId, idTag || 'RFID')} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Start Session</button>
+          <button onClick={() => withErrorCheck(api.stopSession)(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Stop Session</button>
+          <button onClick={() => withErrorCheck(api.setFault)(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Set Fault</button>
+          <button onClick={() => withErrorCheck(api.setAvailable)(connectorId)} disabled={!hasSim} className="px-3 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm" title={!hasSim ? 'Connect to CSMS first' : undefined}>Clear Fault</button>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400">Profile:</span>
           <select
             value={status?.profile?.id ?? ''}
-            onChange={(e) => e.target.value && api.setProfile(e.target.value)}
+            onChange={async (e) => {
+              const v = e.target.value;
+              if (v) {
+                const res = await api.setProfile(v);
+                if (!res?.ok) onError?.(res?.error || res?.message || 'Set profile failed');
+              }
+            }}
             className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white"
           >
             <option value="">Select...</option>
@@ -246,22 +276,33 @@ export default function App() {
   const [connectorId, setConnectorId] = useState(1);
   const [idTag, setIdTag] = useState('RFID-001');
   const [profiles, setProfiles] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     api.getProfiles().then((r) => r.profiles && setProfiles(r.profiles));
   }, []);
 
   const lastHeartbeat = status?.lastHeartbeatAt ?? null;
+  const showError = (msg) => setError(msg);
+  const clearError = () => setError(null);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <Header status={status} connected={connected} profiles={profiles} />
+      <Header status={status} connected={connected} profiles={profiles} onError={showError} />
+      {error && (
+        <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-lg bg-red-900/30 border border-red-600/50 px-4 py-3 text-red-200 text-sm">
+          <span>{error}</span>
+          <button onClick={clearError} className="shrink-0 px-2 py-1 rounded bg-red-600/50 hover:bg-red-600 text-red-100 text-xs font-medium">
+            Dismiss
+          </button>
+        </div>
+      )}
       <main className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
           <ChargerStatusPanel status={status} lastHeartbeat={lastHeartbeat} />
-          <ActiveSessionPanel status={status} onStop={api.stopSession} />
+          <ActiveSessionPanel status={status} onStop={api.stopSession} onError={showError} />
         </div>
-        <ControlsPanel status={status} connectorId={connectorId} setConnectorId={setConnectorId} idTag={idTag} setIdTag={setIdTag} profiles={profiles} />
+        <ControlsPanel status={status} connectorId={connectorId} setConnectorId={setConnectorId} idTag={idTag} setIdTag={setIdTag} profiles={profiles} onError={showError} />
         <OcppLogPanel ocppLog={ocppLog} logFilter={logFilter} setLogFilter={setLogFilter} clearLog={clearLog} />
       </main>
     </div>
