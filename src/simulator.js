@@ -17,7 +17,7 @@ import {
 import { getProfile } from './profiles.js';
 import { buildCallResult, buildCallError } from './ocpp/message.js';
 import { getHandler } from './ocpp/handlers.js';
-import { SessionState, toOcppStatus } from './session-state-machine.js';
+import { SessionState, toOcppStatus, canTransition } from './session-state-machine.js';
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60;
 const DEFAULT_METER_INTERVAL = 60;
@@ -103,13 +103,19 @@ export class Simulator {
     return this.sessionState.get(connectorId) ?? SessionState.Idle;
   }
 
-  setSessionState(connectorId, state) {
+  setSessionState(connectorId, state, { force = false } = {}) {
+    const currentState = this.getSessionState(connectorId);
+    if (!force && !canTransition(currentState, state)) {
+      this.log(`[Simulator] Invalid OCPP state transition: ${currentState} → ${state} (connector ${connectorId})`);
+      return false;
+    }
     this.sessionState.set(connectorId, state);
     const ocppStatus = toOcppStatus(state);
     this.connectorStatus.set(connectorId, ocppStatus);
     this.queue.enqueue('StatusNotification', statusNotificationPayload(connectorId, ocppStatus)).catch((err) =>
       this.log(`[Simulator] StatusNotification failed:`, err.message)
     );
+    return true;
   }
 
   getConnectorStatus(connectorId) {
@@ -349,7 +355,7 @@ export class Simulator {
 
       return this._doStartTransaction(connectorId, idTag);
     } catch (err) {
-      this.setSessionState(connectorId, SessionState.Idle);
+      this.setSessionState(connectorId, SessionState.Idle, { force: true });
       return { ok: false, error: err.message };
     }
   }
@@ -364,7 +370,7 @@ export class Simulator {
     try {
       return this._doStartTransaction(connectorId, idTag);
     } catch (err) {
-      this.setSessionState(connectorId, SessionState.Idle);
+      this.setSessionState(connectorId, SessionState.Idle, { force: true });
       return { ok: false, error: err.message };
     }
   }
@@ -398,7 +404,7 @@ export class Simulator {
       this.log(`[Simulator] Session stopped: connector=${connectorId}, transactionId=${tx.transactionId}, reason=${reason}, energy=${meterStop}Wh`);
       return { ok: true };
     } catch (err) {
-      this.setSessionState(connectorId, SessionState.Idle);
+      this.setSessionState(connectorId, SessionState.Idle, { force: true });
       this.transactions.delete(connectorId);
       return { ok: false, error: err.message };
     }
@@ -481,11 +487,7 @@ export class Simulator {
       if (this.transactions.has(id)) continue;
       this.faultedConnectors.delete(id);
       this.availability.delete(id);
-      this.sessionState.set(id, SessionState.Idle);
-      this.connectorStatus.set(id, ConnectorStatus.Available);
-      this.queue.enqueue('StatusNotification', statusNotificationPayload(id, ConnectorStatus.Available)).catch((err) =>
-        this.log(`[Simulator] StatusNotification failed:`, err.message)
-      );
+      this.setSessionState(id, SessionState.Idle, { force: true });
       this.log(`[Simulator] Connector ${id} set available`);
     }
     return { ok: true };

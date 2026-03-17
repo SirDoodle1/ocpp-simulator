@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { buildCall } from './message.js';
 
+const RESPONSE_TIMEOUT_MS = 30000;
+
 /**
  * Outgoing message queue with unique message IDs.
  * OCPP 1.6 allows only one outstanding CALL per direction (CP→CS).
@@ -10,6 +12,7 @@ export class OutgoingQueue {
     this.sendFn = sendFn;
     this.queue = [];
     this.pending = null; // { messageId, action, payload, resolve, reject }
+    this._timeoutHandle = null;
   }
 
   /**
@@ -38,6 +41,28 @@ export class OutgoingQueue {
     this.pending = item;
     const frame = buildCall(item.messageId, item.action, item.payload);
     this.sendFn(frame);
+    this._startTimeout(item);
+  }
+
+  _startTimeout(item) {
+    this._clearTimeout();
+    this._timeoutHandle = setTimeout(() => {
+      if (!this.pending || this.pending.messageId !== item.messageId) return;
+      const { reject, action, messageId } = this.pending;
+      this.pending = null;
+      this._timeoutHandle = null;
+      reject(new Error(
+        `OCPP CALL timeout: no response for ${action} (id=${messageId}) within ${RESPONSE_TIMEOUT_MS}ms`
+      ));
+      this._drain();
+    }, RESPONSE_TIMEOUT_MS);
+  }
+
+  _clearTimeout() {
+    if (this._timeoutHandle) {
+      clearTimeout(this._timeoutHandle);
+      this._timeoutHandle = null;
+    }
   }
 
   /**
@@ -47,6 +72,7 @@ export class OutgoingQueue {
     if (!this.pending || this.pending.messageId !== messageId) {
       return false;
     }
+    this._clearTimeout();
     const { resolve } = this.pending;
     this.pending = null;
     resolve(payload);
@@ -61,6 +87,7 @@ export class OutgoingQueue {
     if (!this.pending || this.pending.messageId !== messageId) {
       return false;
     }
+    this._clearTimeout();
     const { reject } = this.pending;
     const err = new Error(`${errorCode}: ${errorDescription}`);
     err.code = errorCode;
