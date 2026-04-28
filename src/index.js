@@ -4,25 +4,22 @@ import WebSocket from 'ws';
 import { OutgoingQueue } from './ocpp/queue.js';
 import { parseMessage, MessageType } from './ocpp/message.js';
 import { Simulator } from './simulator.js';
-import { startHttpTrigger, createRequestHandler, TRIGGER_HTTP_PORT } from './triggers.js';
+import { startHttpTrigger, startCliTrigger, createRequestHandler, TRIGGER_HTTP_PORT } from './triggers.js';
 import { initSocket, emit } from './socket.js';
 import { logger, logOcppMessage } from './lib/logger.js';
+import {
+  connectionConfig,
+  buildWebSocketUrl,
+  maskWebSocketUrlForLog,
+} from './connection-config.js';
 
 const OCPP_SUBPROTOCOL = 'ocpp1.6';
 
-const CSMS_WS_URL = (process.env.CSMS_WS_URL || '').trim();
-const CHARGE_POINT_ID = (process.env.CHARGE_POINT_ID || '').trim();
-
-if (!CSMS_WS_URL || !CHARGE_POINT_ID) {
-  console.error('Missing required env vars. Copy .env.example to .env and set CSMS_WS_URL and CHARGE_POINT_ID.');
-  process.exit(1);
+if (!connectionConfig.csmsUrl || !connectionConfig.chargePointId) {
+  logger.warn(
+    'CSMS_WS_URL and/or CHARGE_POINT_ID not set in environment. Configure via the web UI (Settings) or POST /config before connecting.'
+  );
 }
-
-// CSMS expects ws://host:port/ocpp/{chargePointId} - always append chargePointId to base URL
-const baseUrl = CSMS_WS_URL.replace(/\/$/, '');
-const wsUrl = baseUrl.endsWith(`/${CHARGE_POINT_ID}`)
-  ? baseUrl
-  : `${baseUrl}/${CHARGE_POINT_ID}`;
 
 let currentSimulator = null;
 let currentWs = null;
@@ -57,8 +54,29 @@ function emitMeterUpdate(connectorId, transactionId, meterWh, powerW) {
 }
 
 function connect() {
+  const cpId = connectionConfig.chargePointId.trim();
+  const csms = connectionConfig.csmsUrl.trim();
+  if (!cpId || !csms) {
+    logger.warn('Cannot connect: set csmsUrl and chargePointId (Settings or POST /config / .env).');
+    return;
+  }
+
+  let wsUrl;
+  try {
+    wsUrl = buildWebSocketUrl(connectionConfig);
+  } catch (err) {
+    logger.error('Invalid connection config:', err.message);
+    return;
+  }
+
+  if (currentWs && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
+    logger.warn('Already connected or connecting; skip duplicate connect.');
+    return;
+  }
+
   manualDisconnect = false;
-  logger.info(`Connecting to CSMS: ${wsUrl} (chargePointId=${CHARGE_POINT_ID}, subprotocol=${OCPP_SUBPROTOCOL})`);
+  const safeLogUrl = maskWebSocketUrlForLog(wsUrl);
+  logger.info(`Connecting to CSMS: ${safeLogUrl} (chargePointId=${cpId}, subprotocol=${OCPP_SUBPROTOCOL})`);
   const ws = new WebSocket(wsUrl, [OCPP_SUBPROTOCOL], { handshakeTimeout: 10000 });
   currentWs = ws;
 
@@ -77,7 +95,7 @@ function connect() {
   const connectors = parseInt(process.env.NUMBER_OF_CONNECTORS, 10) || 2;
   const chargingSpeedKw = parseFloat(process.env.CHARGING_SPEED_KW, 10) || 7.4;
   const maxSessionDurationSec = parseInt(process.env.MAX_SESSION_DURATION_SEC, 10);
-  const simulator = new Simulator(queue, CHARGE_POINT_ID, {
+  const simulator = new Simulator(queue, cpId, {
     log,
     connectors,
     chargingSpeedKw,
@@ -94,7 +112,7 @@ function connect() {
   emitSessionUpdate();
 
   ws.on('open', async () => {
-    logger.info(`Connected to ${wsUrl} (charge point: ${CHARGE_POINT_ID})`);
+    logger.info(`Connected to ${safeLogUrl} (charge point: ${cpId})`);
     emitConnectionState();
     try {
       let res = await simulator.sendBootNotification();
@@ -180,7 +198,7 @@ function connect() {
 
 function disconnect() {
   manualDisconnect = true;
-  if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+  if (currentWs && currentWs.readyState !== WebSocket.CLOSED && currentWs.readyState !== WebSocket.CLOSING) {
     currentWs.close(1000, 'Manual disconnect');
   }
 }
@@ -209,7 +227,8 @@ server.listen(PORT, () => {
   log(`Server: http://localhost:${PORT}/ (API + Socket.io; React at :5173 in dev)`);
 });
 
-import { startCliTrigger } from './triggers.js';
 startCliTrigger(getSimulator, log);
 
-if (autoConnect) connect();
+if (autoConnect && connectionConfig.csmsUrl && connectionConfig.chargePointId) {
+  connect();
+}

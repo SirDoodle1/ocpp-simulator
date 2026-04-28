@@ -19,6 +19,18 @@ export async function getStatus() {
 export async function getProfiles() {
   return api('/profiles');
 }
+
+export async function getConfig() {
+  return api('/config');
+}
+
+export async function saveConfig(data) {
+  return api('/config', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function connectFromVolltra(data) {
+  return api('/config/from-volltra', { method: 'POST', body: JSON.stringify(data) });
+}
 export async function connect() {
   return api('/connect', { method: 'POST', body: '{}' });
 }

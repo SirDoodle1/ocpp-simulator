@@ -17,6 +17,7 @@ export default defineConfig({
       '/socket.io': { target: 'http://localhost:3000', ws: true },
       '/status': { target: 'http://localhost:3000' },
       '/profiles': { target: 'http://localhost:3000' },
+      '/config': { target: 'http://localhost:3000' },
       '/connect': { target: 'http://localhost:3000' },
       '/disconnect': { target: 'http://localhost:3000' },
       '/plug-in': { target: 'http://localhost:3000' },

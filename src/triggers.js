@@ -6,6 +6,12 @@ import { createInterface } from 'readline';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname, extname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  connectionConfig,
+  buildWebSocketUrl,
+  getPublicConnectionConfig,
+  parseVolltraWebSocketUrl,
+} from './connection-config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.TRIGGER_HTTP_PORT ?? '3000', 10);
@@ -66,6 +72,84 @@ export function createRequestHandler(getSimulator, connectionController, log, se
 
     const simulator = getSimulator();
 
+    if (path === '/config' && req.method === 'GET') {
+      jsonResponse(res, 200, getPublicConnectionConfig());
+      return;
+    }
+
+    if (path === '/config' && req.method === 'POST') {
+      let body;
+      try {
+        body = JSON.parse((await readBody(req)) || '{}');
+      } catch {
+        jsonResponse(res, 400, { ok: false, error: 'Invalid JSON body' });
+        return;
+      }
+      const { csmsUrl, chargePointId, password } = body ?? {};
+      const cs = typeof csmsUrl === 'string' ? csmsUrl.trim() : '';
+      const cp = typeof chargePointId === 'string' ? chargePointId.trim() : '';
+      const pw = typeof password === 'string' ? password.trim() : '';
+      if (!cs || !cp || !pw) {
+        jsonResponse(res, 400, { ok: false, error: 'csmsUrl, chargePointId, and password must be non-empty strings' });
+        return;
+      }
+      try {
+        connectionController?.disconnect?.();
+        connectionConfig.csmsUrl = cs;
+        connectionConfig.chargePointId = cp;
+        connectionConfig.password = pw;
+        buildWebSocketUrl(connectionConfig);
+      } catch (err) {
+        jsonResponse(res, 400, { ok: false, error: err.message });
+        return;
+      }
+      jsonResponse(res, 200, {
+        ok: true,
+        config: { csmsUrl: connectionConfig.csmsUrl, chargePointId: connectionConfig.chargePointId },
+      });
+      return;
+    }
+
+    if (path === '/config/from-volltra' && req.method === 'POST') {
+      let body;
+      try {
+        body = JSON.parse((await readBody(req)) || '{}');
+      } catch {
+        jsonResponse(res, 400, { ok: false, error: 'Invalid JSON body' });
+        return;
+      }
+      const { volltraUrl, password } = body ?? {};
+      const vu = typeof volltraUrl === 'string' ? volltraUrl.trim() : '';
+      const pw = typeof password === 'string' ? password.trim() : '';
+      if (!vu || !pw) {
+        jsonResponse(res, 400, { ok: false, error: 'volltraUrl and password must be non-empty strings' });
+        return;
+      }
+      let parsed;
+      try {
+        parsed = parseVolltraWebSocketUrl(vu);
+      } catch (err) {
+        jsonResponse(res, 400, { ok: false, error: err.message });
+        return;
+      }
+      try {
+        connectionController?.disconnect?.();
+        connectionConfig.csmsUrl = parsed.csmsUrl;
+        connectionConfig.chargePointId = parsed.chargePointId;
+        connectionConfig.password = pw;
+        buildWebSocketUrl(connectionConfig);
+      } catch (err) {
+        jsonResponse(res, 400, { ok: false, error: err.message });
+        return;
+      }
+      jsonResponse(res, 200, {
+        ok: true,
+        chargePointId: connectionConfig.chargePointId,
+        csmsUrl: connectionConfig.csmsUrl,
+      });
+      return;
+    }
+
     if (path === '/profiles' && req.method === 'GET') {
       const { listProfiles } = await import('./profiles.js');
       jsonResponse(res, 200, { profiles: listProfiles() });
@@ -84,6 +168,21 @@ export function createRequestHandler(getSimulator, connectionController, log, se
     }
 
     if (path === '/connect' && req.method === 'POST') {
+      const cp = String(connectionConfig.chargePointId || '').trim();
+      const cs = String(connectionConfig.csmsUrl || '').trim();
+      if (!cp || !cs) {
+        jsonResponse(res, 400, {
+          ok: false,
+          error: 'Configure csmsUrl, chargePointId, and password via Settings (POST /config or POST /config/from-volltra) or .env before connecting.',
+        });
+        return;
+      }
+      try {
+        buildWebSocketUrl(connectionConfig);
+      } catch (err) {
+        jsonResponse(res, 400, { ok: false, error: err.message });
+        return;
+      }
       try {
         connectionController?.connect?.();
         jsonResponse(res, 200, { ok: true, message: 'Connecting...' });
