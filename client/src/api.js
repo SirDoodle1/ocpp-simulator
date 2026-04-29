@@ -31,6 +31,14 @@ export async function saveConfig(data) {
 export async function connectFromVolltra(data) {
   return api('/config/from-volltra', { method: 'POST', body: JSON.stringify(data) });
 }
+
+export async function generateNewCharger() {
+  return api('/config/new-charger', { method: 'POST', body: '{}' });
+}
+
+export async function resetConfig() {
+  return api('/config/reset', { method: 'POST', body: '{}' });
+}
 export async function connect() {
   return api('/connect', { method: 'POST', body: '{}' });
 }
