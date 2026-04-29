@@ -214,38 +214,8 @@ function ControlsPanel({ status, connectorId, setConnectorId, idTag, setIdTag, o
   );
 }
 
-function CopyFieldRow({ label, value, copyLabel = 'Copy' }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-slate-500 shrink-0">{label}</span>
-      <span className="font-mono text-sm text-white break-all">{value}</span>
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="shrink-0 px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-xs text-white"
-      >
-        {copied ? 'Copied' : copyLabel}
-      </button>
-    </div>
-  );
-}
-
 function SettingsPanel({ profiles, status, serverConfig, onReloadConfig, onError }) {
   const hasSim = !!status?.connectors;
-  const [newChargerResult, setNewChargerResult] = useState(null);
-  const [newChargerErr, setNewChargerErr] = useState('');
-  const [newChargerLoading, setNewChargerLoading] = useState(false);
-  const [newChargerConnectErr, setNewChargerConnectErr] = useState('');
   const [volltraUrl, setVolltraUrl] = useState('');
   const [volltraPassword, setVolltraPassword] = useState('');
   const [volltraMsg, setVolltraMsg] = useState('');
@@ -299,47 +269,6 @@ function SettingsPanel({ profiles, status, serverConfig, onReloadConfig, onError
     if (!r2.ok) onError?.(r2.error || r2.message || 'Connect failed');
   };
 
-  const handleGenerateNewCharger = async () => {
-    setNewChargerErr('');
-    setNewChargerConnectErr('');
-    setNewChargerLoading(true);
-    const r = await api.generateNewCharger();
-    setNewChargerLoading(false);
-    if (!r.ok) {
-      setNewChargerResult(null);
-      setNewChargerErr(r.error || 'Failed to generate identity');
-      return;
-    }
-    setNewChargerResult({
-      chargePointId: r.chargePointId,
-      password: r.password,
-      csmsUrl: r.csmsUrl,
-    });
-    await onReloadConfig();
-  };
-
-  const handleNewChargerConnect = async () => {
-    setNewChargerConnectErr('');
-    const r = await api.connect();
-    if (!r.ok) {
-      setNewChargerConnectErr(r.error || r.message || 'Connect failed');
-      return;
-    }
-    await onReloadConfig();
-  };
-
-  const handleResetConfig = async () => {
-    setNewChargerErr('');
-    setNewChargerConnectErr('');
-    const r = await api.resetConfig();
-    if (!r.ok) {
-      setNewChargerErr(r.error || 'Reset failed');
-      return;
-    }
-    setNewChargerResult(null);
-    await onReloadConfig();
-  };
-
   return (
     <section className="bg-slate-800/60 rounded-xl p-5 border border-slate-700 mb-6">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">Connection settings</h2>
@@ -354,48 +283,6 @@ function SettingsPanel({ profiles, status, serverConfig, onReloadConfig, onError
       </p>
 
       <div className="space-y-6">
-        <div>
-          <h3 className="text-sm font-semibold text-white mb-2">New charger simulation</h3>
-          <p className="text-sm text-slate-400 mb-3">
-            Generate a fresh charger identity to test the full host onboarding flow from scratch.
-          </p>
-          <button
-            type="button"
-            onClick={handleGenerateNewCharger}
-            disabled={newChargerLoading}
-            className="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium"
-          >
-            {newChargerLoading ? 'Generating…' : 'Generate new charger identity'}
-          </button>
-          {newChargerErr && <p className="mt-2 text-sm text-red-400">{newChargerErr}</p>}
-          {newChargerResult && (
-            <div className="mt-4 p-4 rounded-lg border border-teal-600/40 bg-slate-900/50 space-y-3 max-w-2xl">
-              <CopyFieldRow label="Charge Point ID:" value={newChargerResult.chargePointId} />
-              <CopyFieldRow label="Password:" value={newChargerResult.password} />
-              <p className="text-sm text-slate-300 pt-1">
-                Copy these into the Volltra app on the OCPP setup screen, then click Connect below.
-              </p>
-              <button
-                type="button"
-                onClick={handleNewChargerConnect}
-                className="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium"
-              >
-                Connect
-              </button>
-              {newChargerConnectErr && <p className="text-sm text-red-400">{newChargerConnectErr}</p>}
-            </div>
-          )}
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={handleResetConfig}
-              className="text-xs text-slate-500 hover:text-slate-300 underline"
-            >
-              Reset to defaults
-            </button>
-          </div>
-        </div>
-
         <div>
           <h3 className="text-sm font-semibold text-white mb-3">Quick connect from Volltra app</h3>
           <label className="block text-xs text-slate-400 mb-1">Paste the WebSocket URL from the Volltra app</label>

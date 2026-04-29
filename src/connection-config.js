@@ -8,13 +8,6 @@ export const connectionConfig = {
   password: (process.env.OCPP_PASSWORD || '').trim(),
 };
 
-/** Restore csmsUrl, chargePointId, and password from environment defaults. */
-export function resetConnectionConfigToEnvDefaults() {
-  connectionConfig.csmsUrl = (process.env.CSMS_WS_URL || '').trim();
-  connectionConfig.chargePointId = (process.env.CHARGE_POINT_ID || '').trim();
-  connectionConfig.password = (process.env.OCPP_PASSWORD || '').trim();
-}
-
 /**
  * Build full WebSocket resource URL (path …/ocpp/{chargePointId}) from base + id.
  * Mirrors legacy: base ending with /{id} is left as-is; else base + '/' + id.

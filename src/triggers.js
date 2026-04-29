@@ -6,34 +6,12 @@ import { createInterface } from 'readline';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname, extname, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { randomBytes } from 'crypto';
 import {
   connectionConfig,
   buildWebSocketUrl,
   getPublicConnectionConfig,
   parseVolltraWebSocketUrl,
-  resetConnectionConfigToEnvDefaults,
 } from './connection-config.js';
-
-const ALPHANUMERIC_UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const ALPHANUMERIC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-function randomFromAlphabet(length, alphabet) {
-  const bytes = randomBytes(length);
-  let out = '';
-  for (let i = 0; i < length; i += 1) {
-    out += alphabet[bytes[i] % alphabet.length];
-  }
-  return out;
-}
-
-function generateTestChargePointId() {
-  return `TEST-${randomFromAlphabet(8, ALPHANUMERIC_UPPER)}`;
-}
-
-function generateRandomPassword16() {
-  return randomFromAlphabet(16, ALPHANUMERIC);
-}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.TRIGGER_HTTP_PORT ?? '3000', 10);
@@ -96,36 +74,6 @@ export function createRequestHandler(getSimulator, connectionController, log, se
 
     if (path === '/config' && req.method === 'GET') {
       jsonResponse(res, 200, getPublicConnectionConfig());
-      return;
-    }
-
-    if (path === '/config/new-charger' && req.method === 'POST') {
-      try {
-        connectionController?.disconnect?.();
-        connectionConfig.chargePointId = generateTestChargePointId();
-        connectionConfig.password = generateRandomPassword16();
-      } catch (err) {
-        jsonResponse(res, 400, { ok: false, error: err.message });
-        return;
-      }
-      jsonResponse(res, 200, {
-        ok: true,
-        chargePointId: connectionConfig.chargePointId,
-        password: connectionConfig.password,
-        csmsUrl: connectionConfig.csmsUrl,
-      });
-      return;
-    }
-
-    if (path === '/config/reset' && req.method === 'POST') {
-      try {
-        connectionController?.disconnect?.();
-        resetConnectionConfigToEnvDefaults();
-      } catch (err) {
-        jsonResponse(res, 500, { ok: false, error: err.message });
-        return;
-      }
-      jsonResponse(res, 200, { ok: true });
       return;
     }
 
